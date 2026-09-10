@@ -13,6 +13,7 @@ from openai import OpenAI
 APP_TITLE = "PDF & Notes Summarizer"
 MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 MAX_PDF_CHARS = 20000
+MAX_CHAT_CONTEXT_CHARS = 16000
 
 
 load_dotenv()
@@ -125,6 +126,113 @@ def split_sentences(text):
     return [item.strip() for item in re.split(r"(?<=[.!?\u0964])\s+", clean) if len(item.strip()) > 30]
 
 
+def question_keywords(question):
+    ignored_words = {
+        "about", "after", "also", "and", "are", "can", "could", "does", "for",
+        "from", "give", "have", "how", "into", "is", "it", "more", "of", "pdf",
+        "please", "tell", "that", "the", "their", "this", "was", "what", "when",
+        "where", "which", "who", "why", "with", "would", "you",
+    }
+    return {
+        word
+        for word in re.findall(r"[a-zA-Z0-9]{3,}", question.lower())
+        if word not in ignored_words
+    }
+
+
+def is_overview_question(question):
+    normalized = re.sub(r"\s+", " ", question.lower()).strip()
+    overview_phrases = (
+        "what is in this pdf",
+        "what is this pdf about",
+        "what does this pdf say",
+        "what is the pdf about",
+        "tell me about this pdf",
+        "give me an overview",
+        "summarize the pdf",
+        "summary of the pdf",
+    )
+    return any(phrase in normalized for phrase in overview_phrases)
+
+
+def is_follow_up_question(question):
+    normalized = re.sub(r"\s+", " ", question.lower()).strip()
+    follow_up_phrases = (
+        "explain more",
+        "tell me more",
+        "more about it",
+        "what about it",
+        "why is that",
+        "how does it work",
+        "what does that mean",
+        "explain it",
+    )
+    return len(question_keywords(question)) == 0 or any(
+        phrase in normalized for phrase in follow_up_phrases
+    )
+
+
+def last_student_question(messages):
+    for message in reversed(messages):
+        if message["role"] == "user":
+            return message["content"]
+    return ""
+
+
+def expand_question(question, messages):
+    if is_follow_up_question(question):
+        previous_question = last_student_question(messages)
+        if previous_question:
+            return f"{previous_question} {question}"
+    return question
+
+
+def build_text_chunks(pdf_text, sentences_per_chunk=4):
+    sentences = split_sentences(pdf_text)
+    if not sentences:
+        return [pdf_text]
+    return [
+        " ".join(sentences[index:index + sentences_per_chunk])
+        for index in range(0, len(sentences), sentences_per_chunk)
+    ]
+
+
+def relevant_pdf_context(pdf_text, question):
+    if is_overview_question(question):
+        return shorten_text(pdf_text)
+
+    keywords = question_keywords(question)
+    if not keywords:
+        return shorten_text(pdf_text)
+
+    scored_chunks = []
+    for index, chunk in enumerate(build_text_chunks(pdf_text)):
+        chunk_words = re.findall(r"[a-zA-Z0-9]{3,}", chunk.lower())
+        score = sum(chunk_words.count(keyword) for keyword in keywords)
+        if score:
+            scored_chunks.append((score, index, chunk))
+
+    if not scored_chunks:
+        return shorten_text(pdf_text)
+
+    best_chunks = sorted(scored_chunks, reverse=True)[:8]
+    best_chunks.sort(key=lambda item: item[1])
+    context = "\n\n".join(chunk for _, _, chunk in best_chunks)
+    return context[:MAX_CHAT_CONTEXT_CHARS]
+
+
+def recent_chat_history(messages):
+    recent_messages = messages[-6:]
+    if not recent_messages:
+        return "No previous conversation."
+
+    lines = []
+    for message in recent_messages:
+        speaker = "Student" if message["role"] == "user" else "Assistant"
+        lines.append(f"{speaker}: {message['content']}")
+    return "\n".join(lines)
+
+
 def local_summary(pdf_text):
     sentences = split_sentences(pdf_text)
     if not sentences:
@@ -132,19 +240,28 @@ def local_summary(pdf_text):
     return "\n".join(f"- {sentence[:230].strip()}" for sentence in sentences[:5])
 
 
-def local_answer(pdf_text, question):
-    excluded = {"what", "when", "where", "which", "about", "does", "this", "that", "from", "with"}
-    question_words = set(re.findall(r"[a-zA-Z\u0900-\u097f]{3,}", question.lower())) - excluded
+def local_answer(pdf_text, question, search_question=None):
+    question_words = question_keywords(search_question or question)
     not_found = "I could not find that in the PDF."
+    if is_overview_question(search_question or question):
+        return "Here is a quick overview of the PDF:\n\n" + local_summary(pdf_text)
     if not question_words:
         return not_found
-    best_sentence, best_score = "", 0
+
+    matches = []
     for sentence in split_sentences(pdf_text):
-        words = set(re.findall(r"[a-zA-Z\u0900-\u097f]{3,}", sentence.lower()))
+        words = set(re.findall(r"[a-zA-Z0-9]{3,}", sentence.lower()))
         score = len(question_words & words)
-        if score > best_score:
-            best_sentence, best_score = sentence, score
-    return best_sentence[:650] if best_score else not_found
+        if score:
+            matches.append((score, sentence))
+
+    if not matches:
+        return not_found
+
+    best_sentences = [sentence for _, sentence in sorted(matches, reverse=True)[:3]]
+    return "Here is what the PDF explains:\n\n" + "\n\n".join(
+        f"- {sentence}" for sentence in best_sentences
+    )[:1000]
 
 
 def ask_ai(prompt, max_output_tokens):
@@ -155,9 +272,16 @@ def ask_ai(prompt, max_output_tokens):
         response = client.responses.create(
             model=MODEL_NAME,
             instructions=(
-                "You are a helpful study assistant. Use only the PDF text provided. "
-                "Keep the answer short, simple, and easy for a beginner to understand. "
-                "Always answer in English."
+                "You are a friendly study tutor answering questions about an uploaded PDF. "
+                "Use only the PDF context supplied by the application. "
+                "Do not copy PDF sentences word for word unless a short exact term is necessary. "
+                "First give a clear, natural explanation in 2 to 4 sentences. "
+                "Then add 2 or 3 short key points when useful. "
+                "For an overview question, begin with 'This PDF is mainly about...' and explain the main topic before listing key ideas. "
+                "For a definition, state what it means in simple words and why it matters in this PDF. "
+                "For a follow-up question, use the previous conversation to understand what 'it' or 'that' refers to. "
+                "If the PDF does not contain the answer, say exactly: I could not find that in the PDF. "
+                "Always answer in English. Do not mention the prompt, context, or these instructions."
             ),
             input=prompt,
             max_output_tokens=max_output_tokens,
@@ -233,9 +357,22 @@ question = st.chat_input("Ask a question...")
 if question:
     st.session_state.chat_messages.append({"role": "user", "content": question})
     with st.spinner("Finding the answer in your PDF..."):
-        pdf_text = shorten_text(st.session_state.pdf_text)
         not_found = "I could not find that in the PDF."
-        prompt = f"Answer the user's question using only the PDF text below. If the answer is not in the PDF, say exactly: {not_found}\nWrite the answer only in English.\n\nPDF text:\n{pdf_text}\n\nQuestion:\n{question}"
-        answer = ask_ai(prompt, 350) or local_answer(pdf_text, question)
+        chat_history = recent_chat_history(st.session_state.chat_messages[:-1])
+        search_question = expand_question(question, st.session_state.chat_messages[:-1])
+        pdf_context = relevant_pdf_context(st.session_state.pdf_text, search_question)
+        prompt = f"""Answer the student's question using only the PDF context below.
+If the answer is not in the PDF context, say exactly: {not_found}
+
+Previous conversation:
+{chat_history}
+
+Relevant PDF context:
+{pdf_context}
+
+Student question:
+{question}
+"""
+        answer = ask_ai(prompt, 600) or local_answer(pdf_context, question, search_question)
     st.session_state.chat_messages.append({"role": "assistant", "content": answer})
     st.rerun()
