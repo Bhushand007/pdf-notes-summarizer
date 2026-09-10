@@ -13,8 +13,6 @@ from openai import OpenAI
 APP_TITLE = "PDF & Notes Summarizer"
 MODEL_NAME = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 MAX_PDF_CHARS = 20000
-LANGUAGES = ("English", "Hindi")
-HINDI_NOT_FOUND = "\u092e\u0941\u091d\u0947 \u092f\u0939 \u091c\u093e\u0928\u0915\u093e\u0930\u0940 PDF \u092e\u0947\u0902 \u0928\u0939\u0940\u0902 \u092e\u093f\u0932\u0940."
 
 
 load_dotenv()
@@ -33,7 +31,6 @@ st.markdown(
     .section-title { font-size: 1.25rem; font-weight: 800; color: #24304f; margin-bottom: 0.25rem; }
     .section-text { color: #6b7590; margin-bottom: 0.9rem; }
     .selected-file { display: inline-block; background: #eef4ff; color: #3156a3; border-radius: 8px; padding: 0.5rem 0.85rem; font-weight: 700; margin-top: 0.75rem; }
-    .language-note { background: #f4f1ff; color: #5540c9; border-radius: 8px; padding: 0.75rem 0.9rem; font-weight: 700; margin-top: 0.85rem; }
     .summary-card { background: #fbfcff; border-left: 5px solid #7c6df2; border-radius: 8px; padding: 1.15rem 1.25rem; margin-top: 0.85rem; color: #25304a; line-height: 1.65; white-space: pre-wrap; box-shadow: inset 0 0 0 1px #edf0fb; }
     .empty-card { background: #fbfcff; border: 1px dashed #c9d2ea; color: #737d96; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 0.85rem; }
     .chat-row { margin: 0.75rem 0; }
@@ -128,19 +125,17 @@ def split_sentences(text):
     return [item.strip() for item in re.split(r"(?<=[.!?\u0964])\s+", clean) if len(item.strip()) > 30]
 
 
-def local_summary(pdf_text, language):
+def local_summary(pdf_text):
     sentences = split_sentences(pdf_text)
     if not sentences:
-        if language == "Hindi":
-            return "\u0907\u0938 PDF \u091f\u0947\u0915\u094d\u0938\u094d\u091f \u0938\u0947 \u0938\u093e\u0930\u093e\u0902\u0936 \u0924\u0948\u092f\u093e\u0930 \u0928\u0939\u0940\u0902 \u0939\u094b \u092a\u093e\u092f\u093e."
         return "A short summary could not be created from this PDF text."
     return "\n".join(f"- {sentence[:230].strip()}" for sentence in sentences[:5])
 
 
-def local_answer(pdf_text, question, language):
+def local_answer(pdf_text, question):
     excluded = {"what", "when", "where", "which", "about", "does", "this", "that", "from", "with"}
     question_words = set(re.findall(r"[a-zA-Z\u0900-\u097f]{3,}", question.lower())) - excluded
-    not_found = HINDI_NOT_FOUND if language == "Hindi" else "I could not find that in the PDF."
+    not_found = "I could not find that in the PDF."
     if not question_words:
         return not_found
     best_sentence, best_score = "", 0
@@ -152,7 +147,7 @@ def local_answer(pdf_text, question, language):
     return best_sentence[:650] if best_score else not_found
 
 
-def ask_ai(prompt, language, max_output_tokens):
+def ask_ai(prompt, max_output_tokens):
     try:
         client = get_client()
         if not client:
@@ -162,7 +157,7 @@ def ask_ai(prompt, language, max_output_tokens):
             instructions=(
                 "You are a helpful study assistant. Use only the PDF text provided. "
                 "Keep the answer short, simple, and easy for a beginner to understand. "
-                f"Always answer in {language}. If the PDF contains Hindi text, write clean and natural Hindi."
+                "Always answer in English."
             ),
             input=prompt,
             max_output_tokens=max_output_tokens,
@@ -193,22 +188,10 @@ for name, default in {
     "pdf_text": "",
     "summary": "",
     "chat_messages": [],
-    "selected_language": "English",
 }.items():
     if name not in st.session_state:
         st.session_state[name] = default
 
-language = st.selectbox(
-    "Answer Language / \u091c\u0935\u093e\u092c \u0915\u0940 \u092d\u093e\u0937\u093e",
-    options=LANGUAGES,
-    index=LANGUAGES.index(st.session_state.selected_language),
-)
-if language != st.session_state.selected_language:
-    st.session_state.selected_language = language
-    st.session_state.summary = ""
-    st.session_state.chat_messages = []
-
-st.markdown(f'<div class="language-note">Answer language: {language}</div>', unsafe_allow_html=True)
 st.markdown('<div class="section-card"><div class="section-title">&#128196; Upload Your PDF</div><div class="section-text">Upload your notes or study material to get started.</div>', unsafe_allow_html=True)
 uploaded_pdf = st.file_uploader("Choose a PDF file", type=["pdf"], label_visibility="collapsed")
 if uploaded_pdf:
@@ -231,8 +214,8 @@ if not st.session_state.pdf_text:
 if st.button("\u2728 Generate Summary"):
     with st.spinner("Creating a quick summary..."):
         pdf_text = shorten_text(st.session_state.pdf_text)
-        prompt = f"Summarize this PDF in 5 short and simple bullet points. Write the summary only in {language}.\n\nPDF text:\n{pdf_text}"
-        st.session_state.summary = ask_ai(prompt, language, 450) or local_summary(pdf_text, language)
+        prompt = f"Summarize this PDF in 5 short and simple bullet points. Write the summary only in English.\n\nPDF text:\n{pdf_text}"
+        st.session_state.summary = ask_ai(prompt, 450) or local_summary(pdf_text)
 
 st.markdown('<div class="section-card"><div class="section-title">&#128221; Summary</div>', unsafe_allow_html=True)
 if st.session_state.summary:
@@ -251,8 +234,8 @@ if question:
     st.session_state.chat_messages.append({"role": "user", "content": question})
     with st.spinner("Finding the answer in your PDF..."):
         pdf_text = shorten_text(st.session_state.pdf_text)
-        not_found = HINDI_NOT_FOUND if language == "Hindi" else "I could not find that in the PDF."
-        prompt = f"Answer the user's question using only the PDF text below. If the answer is not in the PDF, say exactly: {not_found}\nWrite the answer only in {language}.\n\nPDF text:\n{pdf_text}\n\nQuestion:\n{question}"
-        answer = ask_ai(prompt, language, 350) or local_answer(pdf_text, question, language)
+        not_found = "I could not find that in the PDF."
+        prompt = f"Answer the user's question using only the PDF text below. If the answer is not in the PDF, say exactly: {not_found}\nWrite the answer only in English.\n\nPDF text:\n{pdf_text}\n\nQuestion:\n{question}"
+        answer = ask_ai(prompt, 350) or local_answer(pdf_text, question)
     st.session_state.chat_messages.append({"role": "assistant", "content": answer})
     st.rerun()
