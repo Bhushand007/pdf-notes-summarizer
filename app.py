@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 from html import escape
@@ -68,7 +69,7 @@ def get_client():
 
 
 def clean_text(text):
-    text = text.replace("\x00", " ").replace("\ufffd", " ")
+    text = text.replace("\x00", " ")
     text = re.sub(r"[ \t]+", " ", text)
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
@@ -82,11 +83,11 @@ def extract_pymupdf(pdf_bytes):
     document = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         pages = []
-        for number, page in enumerate(document, start=1):
-            text = page.get_text("text").strip()
-            if text:
-                pages.append(f"Page {number}:\n{text}")
-        return clean_text("\n\n".join(pages))
+        for page in document:
+            blocks = page.get_text("blocks", sort=True)
+            page_blocks = [clean_text(block[4]) for block in blocks if len(block) > 4]
+            pages.append("\n\n".join(text for text in page_blocks if text))
+        return pages
     finally:
         document.close()
 
@@ -95,25 +96,30 @@ def extract_pypdf2(pdf_bytes):
     reader = PyPDF2.PdfReader(BytesIO(pdf_bytes))
     if reader.is_encrypted:
         reader.decrypt("")
-    pages = []
-    for number, page in enumerate(reader.pages, start=1):
-        text = (page.extract_text() or "").strip()
-        if text:
-            pages.append(f"Page {number}:\n{text}")
-    return clean_text("\n\n".join(pages))
+    return [clean_text(page.extract_text() or "") for page in reader.pages]
 
 
 def extract_pdf_text(uploaded_file):
     pdf_bytes = uploaded_file.getvalue()
-    results = []
+    extracted_by_engine = []
     for extractor in (extract_pymupdf, extract_pypdf2):
         try:
-            text = extractor(pdf_bytes)
-            if text:
-                results.append(text)
+            pages = extractor(pdf_bytes)
+            if pages:
+                extracted_by_engine.append(pages)
         except Exception:
             continue
-    return max(results, key=quality_score, default="")
+
+    page_count = max((len(pages) for pages in extracted_by_engine), default=0)
+    page_texts = []
+    for index in range(page_count):
+        candidates = [pages[index] for pages in extracted_by_engine if index < len(pages)]
+        text = max(candidates, key=quality_score, default="")
+        if not text:
+            text = "[No selectable text was found on this page.]"
+        page_texts.append(f"--- Page {index + 1} ---\n{text}")
+
+    return clean_text("\n\n".join(page_texts)), page_count
 
 
 def shorten_text(text):
@@ -407,6 +413,8 @@ def ask_ai(prompt, max_output_tokens):
 def reset_for_new_pdf(file_id):
     st.session_state.file_id = file_id
     st.session_state.pdf_text = ""
+    st.session_state.pdf_page_count = 0
+    st.session_state.show_extracted_text = False
     st.session_state.summary = ""
     st.session_state.chat_messages = []
 
@@ -420,6 +428,8 @@ def render_message(role, content):
 for name, default in {
     "file_id": "",
     "pdf_text": "",
+    "pdf_page_count": 0,
+    "show_extracted_text": False,
     "chat_messages": [],
 }.items():
     if name not in st.session_state:
@@ -432,6 +442,7 @@ with st.sidebar:
     )
     if st.button("✎  Start New Chat", use_container_width=True):
         st.session_state.chat_messages = []
+        st.session_state.show_extracted_text = False
         st.rerun()
 
     st.divider()
@@ -449,11 +460,11 @@ with st.sidebar:
         )
 
 if uploaded_pdf is not None:
-    file_id = f"{uploaded_pdf.name}-{uploaded_pdf.size}"
+    file_id = hashlib.sha256(uploaded_pdf.getvalue()).hexdigest()
     if file_id != st.session_state.file_id:
         reset_for_new_pdf(file_id)
         with st.spinner("Reading your PDF..."):
-            st.session_state.pdf_text = extract_pdf_text(uploaded_pdf)
+            st.session_state.pdf_text, st.session_state.pdf_page_count = extract_pdf_text(uploaded_pdf)
 
 if uploaded_pdf is not None and not st.session_state.pdf_text:
     st.error("No readable text was found in this PDF. Try a text-based PDF.")
@@ -467,10 +478,10 @@ st.markdown(
 suggested_question = None
 if not st.session_state.chat_messages:
     prompts = (
+        "Extract all text from the PDF",
         "Summarize the full PDF",
         "Explain the key ideas simply",
         "What is this PDF mainly about?",
-        "What are the main conclusions?",
     )
     _, prompt_column, _ = st.columns([1, 4, 1])
     with prompt_column:
@@ -486,6 +497,21 @@ if not st.session_state.chat_messages:
 for message in st.session_state.chat_messages:
     render_message(message["role"], message["content"])
 
+if st.session_state.show_extracted_text:
+    st.markdown("### Full text extracted from your PDF")
+    st.caption(
+        f"{st.session_state.pdf_page_count} pages · "
+        f"{len(st.session_state.pdf_text):,} characters · shown in original page order"
+    )
+    st.text_area(
+        "Full extracted PDF text",
+        value=st.session_state.pdf_text,
+        height=480,
+        disabled=True,
+        label_visibility="collapsed",
+        key=f"extracted_pdf_text_{st.session_state.file_id}",
+    )
+
 typed_question = st.chat_input(
     "Ask anything about your PDF...",
     disabled=not bool(st.session_state.pdf_text),
@@ -494,7 +520,19 @@ question = typed_question or suggested_question
 if question:
     st.session_state.chat_messages.append({"role": "user", "content": question})
     with st.spinner("Preparing your response..."):
-        if question == "Summarize the full PDF":
+        normalized_question = re.sub(r"[^a-z0-9]+", " ", question.lower()).strip()
+        is_text_extraction = (
+            normalized_question == "extract all text from the pdf"
+            or ("text" in normalized_question and "extract" in normalized_question)
+            or any(phrase in normalized_question for phrase in ("full text", "all text", "pura text", "poora text"))
+        )
+        if is_text_extraction:
+            st.session_state.show_extracted_text = True
+            answer = (
+                f"I extracted the selectable text from all {st.session_state.pdf_page_count} pages. "
+                "The complete text is displayed below, page by page."
+            )
+        elif question == "Summarize the full PDF":
             answer = summarize_full_pdf(st.session_state.pdf_text)
         else:
             not_found = "I could not find that in the PDF."
