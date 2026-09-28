@@ -469,6 +469,16 @@ if uploaded_pdf is not None:
 if uploaded_pdf is not None and not st.session_state.pdf_text:
     st.error("No readable text was found in this PDF. Try a text-based PDF.")
 
+if uploaded_pdf is not None and st.session_state.pdf_text:
+    with st.sidebar:
+        text_button_label = (
+            "Hide extracted text"
+            if st.session_state.show_extracted_text
+            else "View extracted text"
+        )
+        if st.button(text_button_label, use_container_width=True):
+            st.session_state.show_extracted_text = not st.session_state.show_extracted_text
+
 st.markdown(
     '<div class="welcome"><h1>Hi there, what would you like to understand?</h1>'
     '<p>Choose a starting point or ask a question about your PDF.</p></div>',
@@ -478,10 +488,10 @@ st.markdown(
 suggested_question = None
 if not st.session_state.chat_messages:
     prompts = (
-        "Extract all text from the PDF",
         "Summarize the full PDF",
         "Explain the key ideas simply",
         "What is this PDF mainly about?",
+        "What are the main conclusions?",
     )
     _, prompt_column, _ = st.columns([1, 4, 1])
     with prompt_column:
