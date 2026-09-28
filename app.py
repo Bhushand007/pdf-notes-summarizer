@@ -18,47 +18,45 @@ SUMMARY_CHUNK_CHARS = 16000
 
 
 load_dotenv()
-st.set_page_config(page_title=APP_TITLE, page_icon="\U0001f4da", layout="centered")
+st.set_page_config(page_title=APP_TITLE, page_icon="\U0001f4da", layout="wide")
 
 st.markdown(
     """
     <style>
-    .stApp { background: #f8faff; color: #172033; }
-    .block-container { max-width: 900px; padding-top: 2.5rem; padding-bottom: 3rem; }
+    :root { color-scheme: light; }
+    .stApp { background: #f7f8fa; color: #20232b; }
+    [data-testid="stHeader"] { background: rgba(247, 248, 250, 0.94); }
+    [data-testid="stMain"] > div { padding-top: 1.3rem; }
+    [data-testid="stSidebar"] { background: #eef0f4; border-right: 1px solid #e1e4ea; }
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] { gap: 0.85rem; }
+    .block-container { max-width: 1080px; padding: 2.3rem 2rem 7rem; }
     h1, h2, h3, p { letter-spacing: 0; }
-    .app-header { text-align: center; margin-bottom: 1.8rem; }
-    .app-title { font-size: 2.7rem; font-weight: 800; color: #20283d; margin-bottom: 0.4rem; }
-    .app-subtitle { font-size: 1.05rem; color: #66708a; font-weight: 500; }
-    .section-card { background: #ffffff; border: 1px solid #e7ebf7; border-radius: 8px; padding: 1.3rem 1.35rem; margin: 1rem 0; box-shadow: 0 8px 20px rgba(44, 62, 120, 0.08); }
-    .section-title { font-size: 1.25rem; font-weight: 800; color: #24304f; margin-bottom: 0.25rem; }
-    .section-text { color: #6b7590; margin-bottom: 0.9rem; }
-    .selected-file { display: inline-block; background: #eef4ff; color: #3156a3; border-radius: 8px; padding: 0.5rem 0.85rem; font-weight: 700; margin-top: 0.75rem; }
-    .summary-card { background: #fbfcff; border-left: 5px solid #7c6df2; border-radius: 8px; padding: 1.15rem 1.25rem; margin-top: 0.85rem; color: #25304a; line-height: 1.65; white-space: pre-wrap; box-shadow: inset 0 0 0 1px #edf0fb; }
-    .empty-card { background: #fbfcff; border: 1px dashed #c9d2ea; color: #737d96; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 0.85rem; }
-    .chat-row { margin: 0.75rem 0; }
-    .chat-bubble { border-radius: 8px; padding: 0.9rem 1rem; line-height: 1.55; white-space: pre-wrap; box-shadow: 0 6px 16px rgba(40, 55, 105, 0.07); }
-    .user-bubble { background: #eef4ff; border: 1px solid #dce7ff; color: #24304f; }
-    .ai-bubble { background: #ffffff; border: 1px solid #e7ebf7; color: #25304a; }
-    .speaker { font-weight: 800; margin-bottom: 0.35rem; color: #4c5fd7; }
-    div.stButton > button { background: #5f6ff2; color: white; border: 0; border-radius: 8px; padding: 0.65rem 1.35rem; font-weight: 800; box-shadow: 0 8px 18px rgba(95, 111, 242, 0.24); }
-    div.stButton > button:hover { color: white; background: #4d5cda; border: 0; }
-    [data-testid="stFileUploader"] { background: #f8faff; border: 1px dashed #b9c8f6; border-radius: 8px; padding: 0.8rem; }
+    .sidebar-brand { display: flex; align-items: center; gap: 0.65rem; color: #232833; font-size: 1rem; font-weight: 700; padding: 0.35rem 0 0.8rem; }
+    .brand-mark { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid #d8e0f0; border-radius: 10px; background: #e5efff; font-size: 1.15rem; }
+    .sidebar-label { margin: 0.4rem 0 0; color: #7a8190; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; }
+    .file-ready { overflow-wrap: anywhere; color: #375ca8; background: #e4edff; border: 1px solid #d5e2ff; border-radius: 8px; padding: 0.65rem 0.75rem; font-size: 0.83rem; }
+    .welcome { max-width: 780px; margin: 6.5rem auto 1.5rem; }
+    .welcome h1 { margin: 0 0 0.45rem; color: #222936; font-size: 2rem; line-height: 1.25; font-weight: 700; }
+    .welcome p { margin: 0; color: #747d8d; font-size: 1.05rem; }
+    .suggestions { max-width: 780px; margin: 1.35rem auto 0; }
+    .suggestion-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; margin-right: 0.65rem; border-radius: 8px; background: #eff5ff; color: #3678f6; font-size: 1rem; }
+    div.stButton > button { border: 1px solid #e3e6ec; border-radius: 8px; background: #fff; color: #252a33; font-weight: 500; min-height: 48px; box-shadow: none; text-align: left; }
+    div.stButton > button:hover { border-color: #b9c9e8; background: #fbfcff; color: #1f5fd1; }
+    [data-testid="stChatMessage"] { max-width: 790px; margin-left: auto; margin-right: auto; padding: 0.35rem 0; }
+    [data-testid="stChatMessageContent"] { border-radius: 12px; line-height: 1.65; }
+    [data-testid="stChatInput"] { max-width: 790px; margin: 0.75rem auto 0; }
+    [data-testid="stChatInput"] textarea { border-radius: 12px; }
+    [data-testid="stFileUploader"] { padding: 0.6rem; border: 1px dashed #cbd2df; border-radius: 8px; background: #f7f8fa; }
     [data-testid="stAlert"] { border-radius: 8px; }
+    @media (max-width: 700px) {
+      .block-container { padding: 1.2rem 1rem 6rem; }
+      .welcome { margin-top: 3rem; }
+      .welcome h1 { font-size: 1.65rem; }
+    }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
-st.markdown(
-    """
-    <div class="app-header">
-        <div class="app-title">&#128218; PDF &amp; Notes Summarizer</div>
-        <div class="app-subtitle">Upload your notes, get a quick summary, and ask questions.</div>
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
 
 def get_client():
     try:
@@ -414,94 +412,96 @@ def reset_for_new_pdf(file_id):
 
 
 def render_message(role, content):
-    speaker = "You" if role == "user" else "AI"
-    bubble = "user-bubble" if role == "user" else "ai-bubble"
-    st.markdown(
-        f'<div class="chat-row"><div class="chat-bubble {bubble}"><div class="speaker">{speaker}:</div><div>{escape(content)}</div></div></div>',
-        unsafe_allow_html=True,
-    )
-
-
-def extracted_page_count(pdf_text):
-    return len(re.findall(r"^Page\s+\d+:", pdf_text, flags=re.MULTILINE))
+    avatar = "🧑‍🎓" if role == "user" else "📚"
+    with st.chat_message(role, avatar=avatar):
+        st.markdown(content)
 
 
 for name, default in {
     "file_id": "",
     "pdf_text": "",
-    "summary": "",
     "chat_messages": [],
 }.items():
     if name not in st.session_state:
         st.session_state[name] = default
 
-st.markdown('<div class="section-card"><div class="section-title">&#128196; Upload Your PDF</div><div class="section-text">Upload your notes or study material to get started.</div>', unsafe_allow_html=True)
-uploaded_pdf = st.file_uploader("Choose a PDF file", type=["pdf"], label_visibility="collapsed")
-if uploaded_pdf:
-    st.markdown(f'<div class="selected-file">&#9989; Selected: {escape(uploaded_pdf.name)}</div>', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown(
+        '<div class="sidebar-brand"><span class="brand-mark">&#128172;</span><span>AI PDF &amp; Notes</span></div>',
+        unsafe_allow_html=True,
+    )
+    if st.button("✎  Start New Chat", use_container_width=True):
+        st.session_state.chat_messages = []
+        st.rerun()
 
-if not uploaded_pdf:
-    st.stop()
+    st.divider()
+    st.markdown('<div class="sidebar-label">Your PDF</div>', unsafe_allow_html=True)
+    uploaded_pdf = st.file_uploader(
+        "Choose a PDF",
+        type=["pdf"],
+        label_visibility="collapsed",
+        key="pdf_upload",
+    )
+    if uploaded_pdf is not None:
+        st.markdown(
+            f'<div class="file-ready">&#128196; {escape(uploaded_pdf.name)}</div>',
+            unsafe_allow_html=True,
+        )
 
-file_id = f"{uploaded_pdf.name}-{uploaded_pdf.size}"
-if file_id != st.session_state.file_id:
-    reset_for_new_pdf(file_id)
-    with st.spinner("Reading your PDF..."):
-        st.session_state.pdf_text = extract_pdf_text(uploaded_pdf)
+if uploaded_pdf is not None:
+    file_id = f"{uploaded_pdf.name}-{uploaded_pdf.size}"
+    if file_id != st.session_state.file_id:
+        reset_for_new_pdf(file_id)
+        with st.spinner("Reading your PDF..."):
+            st.session_state.pdf_text = extract_pdf_text(uploaded_pdf)
 
-if not st.session_state.pdf_text:
-    st.warning("No readable text was found. Please try a clear text-based PDF.")
-    st.stop()
+if uploaded_pdf is not None and not st.session_state.pdf_text:
+    st.error("No readable text was found in this PDF. Try a text-based PDF.")
 
-if st.button("\u2728 Generate Summary"):
-    with st.spinner("Creating a quick summary..."):
-        st.session_state.summary = summarize_full_pdf(st.session_state.pdf_text)
-
-st.markdown('<div class="section-card"><div class="section-title">&#128221; Summary</div>', unsafe_allow_html=True)
-if st.session_state.summary:
-    st.markdown(f'<div class="summary-card">{escape(st.session_state.summary)}</div>', unsafe_allow_html=True)
-else:
-    st.markdown('<div class="empty-card">Click <b>&#10024; Generate Summary</b> to see a short summary here.</div>', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-
-page_count = extracted_page_count(st.session_state.pdf_text)
 st.markdown(
-    '<div class="section-card"><div class="section-title">&#128196; Full Extracted Text</div>'
-    '<div class="section-text">All readable text from your uploaded PDF is shown below.</div>',
+    '<div class="welcome"><h1>Hi there, what would you like to understand?</h1>'
+    '<p>Choose a starting point or ask a question about your PDF.</p></div>',
     unsafe_allow_html=True,
 )
-st.text_area(
-    "Full PDF text",
-    value=st.session_state.pdf_text,
-    height=520,
-    disabled=True,
-    label_visibility="collapsed",
-)
-st.download_button(
-    "Download Extracted Text",
-    data=st.session_state.pdf_text.encode("utf-8"),
-    file_name=f"{os.path.splitext(uploaded_pdf.name)[0]}_extracted.txt",
-    mime="text/plain",
-)
-if page_count:
-    st.caption(f"Extracted text from {page_count} pages.")
-st.markdown("</div>", unsafe_allow_html=True)
 
-st.markdown('<div class="section-card"><div class="section-title">&#128172; Ask About Your PDF</div><div class="section-text">Ask anything about your uploaded notes.</div>', unsafe_allow_html=True)
+suggested_question = None
+if not st.session_state.chat_messages:
+    prompts = (
+        "Summarize the full PDF",
+        "Explain the key ideas simply",
+        "What is this PDF mainly about?",
+        "What are the main conclusions?",
+    )
+    _, prompt_column, _ = st.columns([1, 4, 1])
+    with prompt_column:
+        for index, prompt in enumerate(prompts):
+            if st.button(
+                f"✧   {prompt}   ›",
+                key=f"starter_prompt_{index}",
+                use_container_width=True,
+                disabled=not bool(st.session_state.pdf_text),
+            ):
+                suggested_question = prompt
+
 for message in st.session_state.chat_messages:
     render_message(message["role"], message["content"])
-st.markdown("</div>", unsafe_allow_html=True)
 
-question = st.chat_input("Ask a question...")
+typed_question = st.chat_input(
+    "Ask anything about your PDF...",
+    disabled=not bool(st.session_state.pdf_text),
+)
+question = typed_question or suggested_question
 if question:
     st.session_state.chat_messages.append({"role": "user", "content": question})
-    with st.spinner("Finding the answer in your PDF..."):
-        not_found = "I could not find that in the PDF."
-        chat_history = recent_chat_history(st.session_state.chat_messages[:-1])
-        search_question = expand_question(question, st.session_state.chat_messages[:-1])
-        pdf_context = relevant_pdf_context(st.session_state.pdf_text, search_question)
-        prompt = f"""Answer the student's question using only the PDF context below.
+    with st.spinner("Preparing your response..."):
+        if question == "Summarize the full PDF":
+            answer = summarize_full_pdf(st.session_state.pdf_text)
+        else:
+            not_found = "I could not find that in the PDF."
+            chat_history = recent_chat_history(st.session_state.chat_messages[:-1])
+            search_question = expand_question(question, st.session_state.chat_messages[:-1])
+            pdf_context = relevant_pdf_context(st.session_state.pdf_text, search_question)
+            prompt = f"""Answer the student's question using only the PDF context below.
 If the answer is not in the PDF context, say exactly: {not_found}
 
 Previous conversation:
@@ -513,6 +513,6 @@ Relevant PDF context:
 Student question:
 {question}
 """
-        answer = ask_ai(prompt, 600) or local_answer(pdf_context, question, search_question)
+            answer = ask_ai(prompt, 600) or local_answer(pdf_context, question, search_question)
     st.session_state.chat_messages.append({"role": "assistant", "content": answer})
     st.rerun()
