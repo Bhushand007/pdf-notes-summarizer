@@ -422,6 +422,10 @@ def render_message(role, content):
     )
 
 
+def extracted_page_count(pdf_text):
+    return len(re.findall(r"^Page\s+\d+:", pdf_text, flags=re.MULTILINE))
+
+
 for name, default in {
     "file_id": "",
     "pdf_text": "",
@@ -459,6 +463,29 @@ if st.session_state.summary:
     st.markdown(f'<div class="summary-card">{escape(st.session_state.summary)}</div>', unsafe_allow_html=True)
 else:
     st.markdown('<div class="empty-card">Click <b>&#10024; Generate Summary</b> to see a short summary here.</div>', unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
+
+page_count = extracted_page_count(st.session_state.pdf_text)
+st.markdown(
+    '<div class="section-card"><div class="section-title">&#128196; Full Extracted Text</div>'
+    '<div class="section-text">All readable text from your uploaded PDF is shown below.</div>',
+    unsafe_allow_html=True,
+)
+st.text_area(
+    "Full PDF text",
+    value=st.session_state.pdf_text,
+    height=520,
+    disabled=True,
+    label_visibility="collapsed",
+)
+st.download_button(
+    "Download Extracted Text",
+    data=st.session_state.pdf_text.encode("utf-8"),
+    file_name=f"{os.path.splitext(uploaded_pdf.name)[0]}_extracted.txt",
+    mime="text/plain",
+)
+if page_count:
+    st.caption(f"Extracted text from {page_count} pages.")
 st.markdown("</div>", unsafe_allow_html=True)
 
 st.markdown('<div class="section-card"><div class="section-title">&#128172; Ask About Your PDF</div><div class="section-text">Ask anything about your uploaded notes.</div>', unsafe_allow_html=True)
