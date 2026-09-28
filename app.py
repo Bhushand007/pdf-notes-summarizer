@@ -259,7 +259,50 @@ def recent_chat_history(messages):
     return "\n".join(lines)
 
 
+def split_pdf_pages(pdf_text):
+    page_matches = re.findall(
+        r"Page\s+(\d+):\s*(.*?)(?=\s*Page\s+\d+:|\Z)",
+        pdf_text,
+        flags=re.DOTALL,
+    )
+    return [(int(number), text.strip()) for number, text in page_matches if text.strip()]
+
+
+def page_highlight(page_number, page_text):
+    if page_number == 1:
+        topic_match = re.search(
+            r"Topic:\s*(.*?)(?=\s*Student Name:|\Z)",
+            page_text,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        if topic_match:
+            topic = re.sub(r"\s+", " ", topic_match.group(1)).strip(" .")
+            if topic:
+                return f"This report focuses on {topic}."
+
+    sentences = split_sentences(page_text)
+    if not sentences:
+        return re.sub(r"\s+", " ", page_text).strip()[:300]
+
+    metadata_terms = ("student name", "roll no", "semester", "date of submission", "name of faculty")
+    useful_sentences = [
+        sentence
+        for sentence in sentences
+        if not any(term in sentence.lower() for term in metadata_terms)
+    ]
+    candidates = useful_sentences or sentences
+    best_sentence = max(candidates, key=lambda sentence: min(len(sentence), 320))
+    return best_sentence[:320].strip()
+
+
 def local_summary(pdf_text):
+    pages = split_pdf_pages(pdf_text)
+    if pages:
+        return "\n".join(
+            f"- Page {number}: {page_highlight(number, text)}"
+            for number, text in pages
+        )
+
     sentences = split_sentences(pdf_text)
     if not sentences:
         return "A short summary could not be created from this PDF text."
